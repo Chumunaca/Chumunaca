@@ -1,0 +1,134 @@
+!pip install flask-cloudflared
+
+from flask import Flask, render_template_string, redirect, jsonify
+from flask_cloudflared import run_with_cloudflared
+
+app = Flask(__name__)
+run_with_cloudflared(app)  # Iniciar Cloudflare Tunnel
+
+turno_p = "Esperando turno..."
+turno_a = "Esperando turno..."
+
+def create_app():
+    global turno_p, turno_a
+
+    @app.route("/")
+    def home():
+        return render_template_string('''
+            <html>
+            <head>
+                <title>Sistema de Turnos - IMSS</title>
+                <style>
+                    body { text-align: center; font-family: Arial, sans-serif; background-color: #f8f9fa; padding: 50px; }
+                    h1 { color: #007bff; }
+                    .turno { font-size: 50px; font-weight: bold; color: red; }
+                    .button { padding: 20px; margin: 10px; font-size: 22px; border-radius: 10px; border: none; cursor: pointer; }
+                    .btn-p { background-color: green; color: white; }
+                    .btn-a { background-color: blue; color: white; }
+                    .btn-pantalla { background-color: black; color: white; }
+                    .container { background: white; padding: 30px; border-radius: 15px; box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.1); display: inline-block; }
+                    footer { margin-top: 20px; font-size: 18px; color: gray; }
+                </style>
+            </head>
+            <body>
+                <div class="container">
+                    <h1>Sistema de Turnos - IMSS</h1>
+                    <h2>Turno Prestaciones: <span class="turno">{{ turno_p }}</span></h2>
+                    <h2>Turno Afiliación: <span class="turno">{{ turno_a }}</span></h2>
+                    <br>
+                    <a href="/nuevo/P" class="button btn-p">Asignar Turno P</a>
+                    <a href="/nuevo/A" class="button btn-a">Asignar Turno A</a>
+                    <br><br>
+                    <a href="/pantalla" target="_blank" class="button btn-pantalla">Abrir Pantalla de Turnos</a>
+                </div>
+                <p><b>Importante:</b> Espere su turno y siga las indicaciones del personal.</p>
+                <footer>Desarrollado por: LMA. Héctor Alan Olvera Martínez</footer>
+            </body>
+            </html>
+        ''', turno_p=turno_p, turno_a=turno_a)
+
+    @app.route("/nuevo/<tipo>")
+    def nuevo_turno(tipo):
+        global turno_p, turno_a
+        if tipo == "P":
+            turno_p = f"P{int(turno_p[1:]) + 1 if turno_p.startswith('P') else 1}"
+        elif tipo == "A":
+            turno_a = f"A{int(turno_a[1:]) + 1 if turno_a.startswith('A') else 1}"
+        return redirect("/")
+
+    @app.route("/turno")
+    def obtener_turno():
+        return jsonify({"turno_p": turno_p, "turno_a": turno_a})
+
+    @app.route("/pantalla")
+    def pantalla():
+        return render_template_string('''
+            <html>
+            <head>
+                <title>Turno en Atención</title>
+                <style>
+                    body { background-color: black; color: white; text-align: center; font-size: 50px; padding-top: 50px; }
+                    .container { display: flex; justify-content: space-around; align-items: center; height: 60vh; }
+                    .turno-box { width: 45%; padding: 20px; border: 2px solid white; border-radius: 10px; }
+                    .turno { font-size: 80px; font-weight: bold; color: red; }
+                    #clock { font-size: 40px; margin-top: 20px; }
+                    footer { font-size: 20px; color: gray; margin-top: 20px; }
+                </style>
+                <script>
+                    function actualizarTurno() {
+                        fetch('/turno')
+                        .then(response => response.json())
+                        .then(data => {
+                            let turnoP = document.getElementById('turno_p');
+                            let turnoA = document.getElementById('turno_a');
+                            if (turnoP.innerText !== data.turno_p) {
+                                turnoP.innerText = data.turno_p;
+                                hablarTurno(data.turno_p);
+                            }
+                            if (turnoA.innerText !== data.turno_a) {
+                                turnoA.innerText = data.turno_a;
+                                hablarTurno(data.turno_a);
+                            }
+                        });
+                    }
+
+                    function hablarTurno(turno) {
+                        let mensaje = new SpeechSynthesisUtterance("Turno " + turno);
+                        mensaje.lang = "es-ES";
+                        window.speechSynthesis.speak(mensaje);
+                    }
+
+                    function actualizarReloj() {
+                        let reloj = document.getElementById('clock');
+                        let ahora = new Date();
+                        let hora = ahora.getHours().toString().padStart(2, '0');
+                        let minutos = ahora.getMinutes().toString().padStart(2, '0');
+                        let segundos = ahora.getSeconds().toString().padStart(2, '0');
+                        reloj.innerText = hora + ":" + minutos + ":" + segundos;
+                    }
+
+                    setInterval(actualizarTurno, 2000);
+                    setInterval(actualizarReloj, 1000);
+                </script>
+            </head>
+            <body>
+                <h1>Turno en Atención</h1>
+                <div id="clock"></div>
+                <div class="container">
+                    <div class="turno-box">
+                        <h2>Prestaciones Económicas</h2>
+                        <p id="turno_p" class="turno">{{ turno_p }}</p>
+                    </div>
+                    <div class="turno-box">
+                        <h2>Afiliación y Vigencia</h2>
+                        <p id="turno_a" class="turno">{{ turno_a }}</p>
+                    </div>
+                </div>
+                <p><b>Importante:</b> Espere su turno y siga las indicaciones del personal.</p>
+                <footer>Desarrollado por: LMA. Héctor Alan Olvera Martínez</footer>
+            </body>
+            </html>
+        ''', turno_p=turno_p, turno_a=turno_a)
+
+create_app()
+app.run()
